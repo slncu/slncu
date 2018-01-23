@@ -1,98 +1,64 @@
-pipeline {
-  agent any
+#!groovy
 
-  tools {
-    nodejs 'node7.10.0'
-  }
+def err_msg = ""
+def repo_name = "jenkins-pipeline-sample"
+def git_url = "git@sample.github.com:comefigo/${repo_name}.git"
+def dev_branch = "dev"
+def release_branch = "master"
 
-  environment {
-    CIRCLE_PROJECT_USERNAME = 'slncu'
-    CIRCLE_PROJECT_REPONAME = 'slncu'
-    GIT_COMMITTER_NAME = 'jenkins'
-    GIT_COMMITTER_EMAIL = 'braundrot.s@gmail.com'
-    GIT_AUTHOR_NAME = 'jenkins'
-    GIT_AUTHOR_EMAIL = 'braundrot.s@gmail.com'
-  }
-
-  stages {
-    stage('dependency') {
-      steps {
-        echo 'test成功'
+node {
+  try {
+    // ソースの取得
+    stage("get resource") {
+      // カレントディレクトにgitリポジトリが存在するか否かの確認
+      if(fileExists("./${repo_name}") && fileExists("./${repo_name}/.git")) {
+        // ブランチの切替
+        def CHECKOUT_RESULT = sh(script: "cd ./${repo_name} && git checkout ${dev_branch}", returnStatus: true) == 0
+        if(!CHECKOUT_RESULT) {
+          // throw error
+          error "checkoutに失敗しました"
+        }
+        // gitがある場合はpull
+        def PULL_RESULT = sh(script: "cd ./${repo_name} && git pull", returnStatus: true) == 0
+        if(!PULL_RESULT) {
+          error "pullに失敗しました"
+        }
+      } else {
+        // gitがない場合はclone
+        def CLONE_RESULT = sh(script: "git clone ${git_url} ${repo_name}", returnStatus: true) == 0
+        if(!CLONE_RESULT) {
+          error "cloneに失敗しました"
+        }
       }
     }
+      
+    // npmライブラリのインストール
+    stage("install libs") {
+      withEnv(["PATH+NODE=${JENKINS_HOME}/.nvm/versions/node/v6.9.3/bin/"]) {
+        def NPM_RESULT = sh(script: "cd ./${repo_name} && npm install", returnStatus: true) == 0
+        if(!NPM_RESULT) {
+          error "npm installに失敗しました"
+        }
+      }
+    }
+      
+      // コードのテスト
+      stage("testing code") {
+        withEnv(["PATH+NODE=${JENKINS_HOME}/.nvm/versions/node/v6.9.5/bin/"]) {
+          def TEST_RESULT = sh(script: "cd ./${repo_name} && npm test", returnStatus: true) == 0
+          if(!TEST_RESULT) {
+            error "testに失敗しました"
+          }
+        }
+      }
 
-    // stage('dist') {
-    //   when {
-    //     branch 'release'
-    //     expression {
-    //       !sh(returnStdout: true, script: 'git show -s --format=%s HEAD').trim().startsWith(':rocket:')
-    //     }
-    //   }
-
-    //   steps {
-    //     sh 'npm run ci:status -- pending jenkins/dist "リリースビルド中" $BUILD_URL'
-    //     sh 'npm run dist'
-    //     sh 'git add .'
-    //     sh 'git commit -m ":rocket: chore: update dist - automated commit by jenkins"'
-    //     sh 'git push origin HEAD:release'
-    //   }
-
-    //   post {
-    //     success {
-    //       sh 'npm run ci:status -- success jenkins/dist "リリースビルド成功" $BUILD_URL'
-    //     }
-    //     failure {
-    //       sh 'npm run ci:status -- failure jenkins/dist "リリースビルド失敗" $BUILD_URL'
-    //     }
-    //   }
-    // }
-
-    // stage('lint') {
-    //   steps {
-    //     sh 'npm run ci:status -- pending jenkins/lint "Lint中" $BUILD_URL'
-    //     sh 'npm run lint'
-    //   }
-    //   post {
-    //     success {
-    //       sh 'npm run ci:status -- success jenkins/lint "Lint OK" $BUILD_URL'
-    //     }
-    //     failure {
-    //       sh 'npm run ci:status -- failure jenkins/lint "Lint Error" $BUILD_URL'
-    //     }
-    //   }
-    // }
-
-    // stage('stylelint') {
-    //   steps {
-    //     sh 'npm run ci:status -- pending jenkins/stylelint "Stylelint中" $BUILD_URL'
-    //     sh 'npm run stylelint'
-    //   }
-    //   post {
-    //     success {
-    //       sh 'npm run ci:status -- success jenkins/stylelint "Stylelint OK" $BUILD_URL'
-    //     }
-    //     failure {
-    //       sh 'npm run ci:status -- failure jenkins/stylelint "Stylelint Error" $BUILD_URL'
-    //     }
-    //   }
-    // }
-
-    // stage('unit test') {
-    //   steps {
-    //     sh 'npm run ci:status -- pending jenkins/unit-test "ユニットテスト中" $BUILD_URL'
-    //     sh 'npm test'
-    //   }
-    //   post {
-    //     success {
-    //       sh 'npm run ci:status -- success jenkins/unit-test "ユニットテストOK" $BUILD_URL'
-    //     }
-    //     failure {
-    //       sh 'npm run ci:status -- failure jenkins/unit-test "ユニットテスト失敗" $BUILD_URL'
-    //     }
-    //     always {
-    //       sh 'npm run codecov'
-    //     }
-    //   }
-    // }
+  } catch (err) {
+    err_msg = "${err}"
+    currentBuild.result = "FAILURE"
+  } finally {
+    if(currentBuild.result != "FAILURE") {
+      currentBuild.result = "SUCCESS"
+    }
+    notigication(err_msg)
   }
 }
