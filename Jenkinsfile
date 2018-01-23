@@ -2,7 +2,7 @@ pipeline {
   agent any
 
   tools {
-    nodejs 'Latest'
+    nodejs 'node7.10.0'
   }
 
   environment {
@@ -12,10 +12,6 @@ pipeline {
     GIT_COMMITTER_EMAIL = 'braundrot.s@gmail.com'
     GIT_AUTHOR_NAME = 'jenkins'
     GIT_AUTHOR_EMAIL = 'braundrot.s@gmail.com'
-  }
-
-  options {
-    ansiColor colorMapName: 'XTerm'
   }
 
   stages {
